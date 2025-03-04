@@ -69,7 +69,7 @@ EdgeImpulse: https://edgeimpulse.com/<br/>
 指导过程：该仓库的doc文件夹下，先查看config tutorial，再查看data forward<br/>
 
 - 如果后续想要新增手势，需要登录EdgeImpulse网站并且打开项目。
-- 在魔法棒K10上上传scr->Train.cpp，并且打开串口监视器，确保串口输出有加速度传感器数据
+- 在魔法棒K10上上传scrc->Train.cpp，并且打开串口监视器，确保串口输出有加速度传感器数据
 - 配置edgeimpulse数据上传环境（参考doc->config tutorial文档）
 - 选择数据上传到magic-xhl这个项目（参考doc->magic Wond data forward）
 - 导出arduino library之后，使用该仓库中的resource->conv.cpp,depthwise_conv.cpp替换导出Arduino库中的magic-xhl_inferencing\src\edge-impulse-sdk\tensorflow\lite\micro\kernels文件夹下的同名文件
