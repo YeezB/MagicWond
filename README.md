@@ -19,7 +19,7 @@
 │  ├─TrasmitterPic #发送端SD卡文件
 │  ├─conv.cpp #替换Arduino库内文件
 │  └─depthwise_conv.cpp #替换Arduino库内文件
-└─src
+├─src
 │  ├─Receiver.cpp #接收端代码
 │  ├─Train.cpp #训练时数据转发代码
 │  └─Trasmitterv.cpp #发送端代码
@@ -40,12 +40,12 @@
 ## 安装说明
 1. 复制DFRobot_NeoPixel库，RMT库，Edge Impulse机器学习推理库（magic-xhl_inferencing）到Arduino IDE的libraries目录，并且配置好UNIHIKER K10 Arduino 编译环境
 2. 打开Arduino IDE，新建任意.ino文件，并且将Trasmitter.cpp或者Receiver.cpp复制到.ino文件中
-4. 将该TrasmitterPic文件夹中所有.png复制到SD卡中，插入魔法棒发送端的k10
+4. 将resource->TrasmitterPic文件夹中所有.png复制到SD卡中，插入魔法棒发送端的k10
 
 ## 使用说明
 1. 将Transmitter代码上传到魔法棒k10（默认内部已经上传代码）
 2. 将Receiver代码上传到魔法帽k10，并且通过代码开头的宏定义注释切换不同的帽子（默认内部已经上传代码）
-#define blackHAT
+#define blackHAT<br/>
 //#define orangeHAT
 3. 安装3节AA电池到帽子，单节CR123A电池到魔法棒
 4. 按下魔法棒按键，2秒内画圆，上下摇晃或者左右摇晃来控制魔法帽
@@ -72,5 +72,5 @@ EdgeImpulse: https://edgeimpulse.com/<br/>
 - 在魔法棒K10上上传scr->Train.cpp，并且打开串口监视器，确保串口输出有加速度传感器数据
 - 配置edgeimpulse数据上传环境（参考doc->config tutorial文档）
 - 选择数据上传到magic-xhl这个项目（参考doc->magic Wond data forward）
-- 导出arduino library之后，使用resource->conv.cpp,depthwise_conv.cpp替换magic-xhl_inferencing\src\edge-impulse-sdk\tensorflow\lite\micro\kernels文件夹下的同名文件
+- 导出arduino library之后，使用该仓库中的resource->conv.cpp,depthwise_conv.cpp替换导出Arduino库中的magic-xhl_inferencing\src\edge-impulse-sdk\tensorflow\lite\micro\kernels文件夹下的同名文件
 - 将Transmit.cpp上传到魔法棒发射端UNHIKER K10即可
