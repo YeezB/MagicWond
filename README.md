@@ -73,4 +73,4 @@ EdgeImpulse: https://edgeimpulse.com/<br/>
 - 配置edgeimpulse数据上传环境（参考doc->config tutorial文档）
 - 选择数据上传到magic-xhl这个项目（参考doc->magic Wond data forward）
 - 导出arduino library之后，使用resource->conv.cpp,depthwise_conv.cpp替换magic-xhl_inferencing\src\edge-impulse-sdk\tensorflow\lite\micro\kernels文件夹下的同名文件
-- 将Transmit.cpp上传到魔法棒发射端电脑即可
+- 将Transmit.cpp上传到魔法棒发射端UNHIKER K10即可
