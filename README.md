@@ -6,14 +6,23 @@
 ## 文件结构
 ```
 ├─build #发射端编译文件，基于BETT英国站训练模型
-├─Case  #魔法棒外壳设计问津
+├─Case  #魔法棒外壳设计文件
+├─doc   #训练过程指导
+│  ├─edgeimpulse config tutorial #edgeimpulse本地转发环境配置
+│  ├─magicWond data forward #数据转发，模型训练教程
+│  └─magicWond press releases #魔法棒新闻稿
 ├─lib   #编译使用库
 │  ├─DFRobot_NeoPixel
 │  ├─magic-xhl_inferencing
 │  └─RMT
 ├─resource #资源文件
-│  └─TrasmitterPic #
-└─src #Trasmitter(魔法棒发送端代码)，Receive（接收端代码），Train(训练使用代码)
+│  ├─TrasmitterPic #发送端SD卡文件
+│  ├─conv.cpp #替换Arduino库内文件
+│  └─depthwise_conv.cpp #替换Arduino库内文件
+└─src
+│  ├─Receiver.cpp #接收端代码
+│  ├─Train.cpp #训练时数据转发代码
+│  └─Trasmitterv.cpp #发送端代码
 
 ```
 
@@ -55,9 +64,9 @@
 - 魔法帽通过继电器控制，继电器统一接到魔法帽k10内部的P0引脚
 
 ## 训练过程
-EdgeImpulse: https://edgeimpulse.com/
-项目链接：https://studio.edgeimpulse.com/studio/587543
-指导过程：该仓库的doc文件夹下，先查看config tutorial，再查看data forward
+EdgeImpulse: https://edgeimpulse.com/<br/>
+项目链接：https://studio.edgeimpulse.com/studio/587543<br/>
+指导过程：该仓库的doc文件夹下，先查看config tutorial，再查看data forward<br/>
 
 - 如果后续想要新增手势，需要登录EdgeImpulse网站并且打开项目。
 - 在魔法棒K10上上传scr->Train.cpp，并且打开串口监视器，确保串口输出有加速度传感器数据
