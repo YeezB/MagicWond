@@ -1,18 +1,35 @@
-/*
- * Copyright (c) 2024 EdgeImpulse Inc.
+/* The Clear BSD License
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2025 EdgeImpulse Inc.
+ * All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an "AS
- * IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
- * express or implied. See the License for the specific language
- * governing permissions and limitations under the License.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted (subject to the limitations in the disclaimer
+ * below) provided that the following conditions are met:
  *
- * SPDX-License-Identifier: Apache-2.0
+ *   * Redistributions of source code must retain the above copyright notice,
+ *   this list of conditions and the following disclaimer.
+ *
+ *   * Redistributions in binary form must reproduce the above copyright
+ *   notice, this list of conditions and the following disclaimer in the
+ *   documentation and/or other materials provided with the distribution.
+ *
+ *   * Neither the name of the copyright holder nor the names of its
+ *   contributors may be used to endorse or promote products derived from this
+ *   software without specific prior written permission.
+ *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY
+ * THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 #ifndef _EIDSP_NUMPY_H_
 #define _EIDSP_NUMPY_H_
@@ -24,6 +41,12 @@
 #ifndef __has_include
 #define __has_include 1
 #endif // __has_include
+
+// Arduino build defines abs as a macro. That is invalid C++, and breaks
+// libc++'s <complex> header, undefine it.
+#ifdef abs
+#undef abs
+#endif
 
 #include <stdint.h>
 #include <string.h>
@@ -45,9 +68,15 @@
 #endif
 
 #if EIDSP_USE_CEVA_DSP
+#if EIDSP_USE_CEVA_DSP_FIXED
+#include "edge-impulse-sdk/dsp/dsp_engines/ei_ceva_dsp_fixed.h"
+#else
 #include "edge-impulse-sdk/dsp/dsp_engines/ei_ceva_dsp.h"
+#endif
 #elif EIDSP_USE_CMSIS_DSP
 #include "edge-impulse-sdk/dsp/dsp_engines/ei_arm_cmsis_dsp.h"
+#elif EIDSP_USE_ESP_DSP
+#include "edge-impulse-sdk/dsp/dsp_engines/ei_esp_dsp.h"
 #else
 #define EIDSP_INCLUDE_KISSFFT 1
 #include "edge-impulse-sdk/dsp/dsp_engines/ei_no_hw_dsp.h"
@@ -1327,25 +1356,18 @@ public:
             src_size = n_fft;
         }
 
-        // declare input and output arrays
-        float *fft_input_buffer = NULL;
-        if (src_size >= n_fft) { // technically they can only be equal or src < n_fft, b/c of step above
-            fft_input_buffer = (float*)src;
-        } // else we need to copy over and pad
-
-        // If fft_input_buffer is NULL (see above), then the constructor will allocate a new buffer
-        EI_DSP_MATRIX_B(fft_input, 1, n_fft, fft_input_buffer);
+        // Unfortunately, arm fft (at least) modifies the input buffer AND does not work in place
+        // So we have to copy the input to a new buffer
+        EI_DSP_MATRIX(fft_input, 1, n_fft);
         if (!fft_input.buffer) {
             EIDSP_ERR(EIDSP_OUT_OF_MEM);
         }
 
         // If the buffer wasn't assigned to source above, let's copy and pad
-        if (!fft_input_buffer) {
-            // copy from src to fft_input
-            memcpy(fft_input.buffer, src, src_size * sizeof(float));
-            // pad to the rigth with zeros
-            memset(fft_input.buffer + src_size, 0, (n_fft - src_size) * sizeof(float));
-        }
+        // copy from src to fft_input
+        memcpy(fft_input.buffer, src, src_size * sizeof(float));
+        // pad to the rigth with zeros
+        memset(fft_input.buffer + src_size, 0, (n_fft - src_size) * sizeof(float));
 
         auto res = ei::fft::hw_r2c_fft(fft_input.buffer, output, n_fft);
         if (handle_fft_hw_failure(res, n_fft)) {
@@ -2526,5 +2548,71 @@ struct fmat {
     }
 };
 } // namespace ei
+
+__attribute__((unused)) static bool find_mtx_by_idx(ei_feature_t* mtx, ei::matrix_t** matrix, uint32_t mtx_id, size_t mtx_size) {
+    for (uint32_t i = 0; i < mtx_size; i++) {
+        EI_LOGD("mtx[%d].blockId = %d\n", i, mtx[i].blockId);
+        if (mtx[i].matrix == NULL) {
+            EI_LOGD("Matrix is NULL\n");
+            continue;
+        }
+        if (mtx[i].blockId == mtx_id || mtx[i].blockId == 0) {
+            EI_LOGD("Found matrix with blockId %d\n", mtx[i].blockId);
+            *matrix = mtx[i].matrix;
+            return true;
+        }
+    }
+    EI_LOGD("Matrix not found\n");
+    return false;
+}
+
+__attribute__((unused)) static bool find_mtx_by_idx(ei_feature_t* mtx, ei::matrix_i8_t** matrix, uint32_t mtx_id, size_t mtx_size) {
+    for (uint32_t i = 0; i < mtx_size; i++) {
+        EI_LOGD("mtx[%d].blockId = %d\n", i, mtx[i].blockId);
+        if (mtx[i].matrix_i8 == NULL) {
+            EI_LOGD("Matrix is NULL\n");
+            continue;
+        }
+        if (mtx[i].blockId == mtx_id || mtx[i].blockId == 0) {
+            EI_LOGD("Found matrix with blockId %d\n", mtx[i].blockId);
+            *matrix = mtx[i].matrix_i8;
+            return true;
+        }
+    }
+    EI_LOGD("Matrix not found\n");
+    return false;
+}
+
+__attribute__((unused)) static bool find_mtx_by_idx(ei_feature_t* mtx, ei::matrix_u8_t** matrix, uint32_t mtx_id, size_t mtx_size) {
+    for (uint32_t i = 0; i < mtx_size; i++) {
+        EI_LOGD("mtx[%d].blockId = %d\n", i, mtx[i].blockId);
+        if (mtx[i].matrix_u8 == NULL) {
+            EI_LOGD("Matrix is NULL\n");
+            continue;
+        }
+        if (mtx[i].blockId == mtx_id || mtx[i].blockId == 0) {
+            EI_LOGD("Found matrix with blockId %d\n", mtx[i].blockId);
+            *matrix = mtx[i].matrix_u8;
+            return true;
+        }
+    }
+    EI_LOGD("Matrix not found\n");
+    return false;
+}
+
+__attribute__((unused)) static size_t get_feature_size(ei_feature_t* mtx, uint32_t ids_size, uint32_t* ids, size_t mtx_size) {
+    size_t feat_size = 0;
+    ei::matrix_t* matrix = NULL;
+    for (size_t i = 0; i < ids_size; i++) {
+        size_t cur_mtx = ids[i];
+
+        if (!find_mtx_by_idx(mtx, &matrix, cur_mtx, mtx_size)) {
+            ei_printf("ERR: Cannot find matrix with id %zu\n", cur_mtx);
+            return -1;
+        }
+        feat_size += matrix->rows * matrix->cols;
+    }
+    return feat_size;
+}
 
 #endif // _EIDSP_NUMPY_H_

@@ -20,7 +20,27 @@ set(_DSP_CMSIS_SOURCES
     CACHE INTERNAL "DSP CMSIS Source"
 )
 
-RECURSIVE_FIND_FILE_APPEND(_DSP_CMSIS_SOURCES "${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions" "*.c")
+list(APPEND _DSP_CMSIS_SOURCES
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions/arm_cfft_f32.c
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions/arm_cfft_init_f32.c
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions/arm_cfft_radix2_f32.c
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions/arm_cfft_radix2_init_f32.c
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions/arm_cfft_radix4_f32.c
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions/arm_cfft_radix4_init_f32.c
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions/arm_cfft_radix8_f32.c
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions/arm_dct4_f32.c
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions/arm_dct4_init_f32.c
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions/arm_mfcc_f32.c
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions/arm_mfcc_init_f32.c
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions/arm_rfft_f32.c
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions/arm_rfft_fast_f32.c
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions/arm_rfft_fast_init_f32.c
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions/arm_rfft_init_f32.c
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions/arm_bitreversal2.c
+    ${EI_SDK_FOLDER}/CMSIS/DSP/Source/TransformFunctions/arm_bitreversal.c
+)
+
+
 RECURSIVE_FIND_FILE_APPEND(_DSP_CMSIS_SOURCES "${EI_SDK_FOLDER}/CMSIS/DSP/Source/CommonTables" "*.c")
 RECURSIVE_FIND_FILE_APPEND(_DSP_CMSIS_SOURCES "${EI_SDK_FOLDER}/CMSIS/DSP/Source/BasicMathFunctions" "*.c")
 RECURSIVE_FIND_FILE_APPEND(_DSP_CMSIS_SOURCES "${EI_SDK_FOLDER}/CMSIS/DSP/Source/ComplexMathFunctions" "*.c")
@@ -48,6 +68,9 @@ function(apply_predefined_sources TARGET_NAME)
     if(NOT TARGET ${TARGET_NAME})
         message(FATAL_ERROR "Target ${TARGET_NAME} does not exist")
     endif()
+
+    # Enable vector conversions, for M55
+    target_compile_options(${TARGET_NAME} PRIVATE -flax-vector-conversions)
 
     # Always add base sources
     if(_BASE_SOURCES)

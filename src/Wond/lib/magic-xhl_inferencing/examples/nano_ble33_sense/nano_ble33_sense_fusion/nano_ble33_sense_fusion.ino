@@ -39,9 +39,16 @@ typedef struct{
 
 /* Constant defines -------------------------------------------------------- */
 #define CONVERT_G_TO_MS2    9.80665f
-#define MAX_ACCEPTED_RANGE  2.0f        // starting 03/2022, models are generated setting range to +-2,
-                                        // but this example use Arudino library which set range to +-4g. 
-                                        // If you are using an older model, ignore this value and use 4.0f instead
+
+/**
+ * When data is collected by the Edge Impulse Arduino Nano 33 BLE Sense
+ * firmware, it is limited to a 2G range. If the model was created with a
+ * different sample range, modify this constant to match the input values.
+ * See https://github.com/edgeimpulse/firmware-arduino-nano-33-ble-sense/blob/master/src/sensors/ei_lsm9ds1.cpp
+ * for more information.
+ */
+#define MAX_ACCEPTED_RANGE  2.0f
+
 /** Number sensor axes used */
 #define N_SENSORS     18
 

@@ -1,23 +1,41 @@
-/*
- * Copyright (c) 2024 EdgeImpulse Inc.
+/* The Clear BSD License
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2025 EdgeImpulse Inc.
+ * All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an "AS
- * IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
- * express or implied. See the License for the specific language
- * governing permissions and limitations under the License.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted (subject to the limitations in the disclaimer
+ * below) provided that the following conditions are met:
  *
- * SPDX-License-Identifier: Apache-2.0
+ *   * Redistributions of source code must retain the above copyright notice,
+ *   this list of conditions and the following disclaimer.
+ *
+ *   * Redistributions in binary form must reproduce the above copyright
+ *   notice, this list of conditions and the following disclaimer in the
+ *   documentation and/or other materials provided with the distribution.
+ *
+ *   * Neither the name of the copyright holder nor the names of its
+ *   contributors may be used to endorse or promote products derived from this
+ *   software without specific prior written permission.
+ *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY
+ * THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef EI_OBJECT_TRACKING_H
 #define EI_OBJECT_TRACKING_H
 
+#include <cstring>
 #include "edge-impulse-sdk/dsp/numpy_types.h"
 #include "edge-impulse-sdk/dsp/returntypes.hpp"
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
@@ -72,6 +90,7 @@ public:
         }
 
         trace_label = initial_bbox.label;
+        trace_score = initial_bbox.value;
         observations.push_back(initial_bbox);
         float initial_centroid[2] = { initial_bbox.x + static_cast<float>(initial_bbox.width) / 2,
                                       initial_bbox.y + static_cast<float>(initial_bbox.height) / 2 };
@@ -82,6 +101,7 @@ public:
         centroid_filter = new TinyEKF(initial_centroid, 8, 2);
         width_height_filter = new TinyEKF(initial_width_height, 8, 2);
 
+        // Use x0, y0, x1, y1 for EMAs
         xyxy_emas[0] = new ExponentialMovingAverage(this->max_observations);
         xyxy_emas[1] = new ExponentialMovingAverage(this->max_observations);
         xyxy_emas[2] = new ExponentialMovingAverage(this->max_observations);
@@ -98,7 +118,6 @@ public:
     }
 
     ei_impulse_result_bounding_box_t predict() {
-
         fx_centroid[0] = centroid_filter->x[0];
         fx_centroid[1] = centroid_filter->x[1];
         fx_width_height[0] = width_height_filter->x[0];
@@ -109,11 +128,11 @@ public:
 
         ei_impulse_result_bounding_box_t p_bbox = {"", 0, 0, 0, 0, 0.0};
         p_bbox.label = trace_label;
-        p_bbox.x = clip((centroid_filter->x[0] - width_height_filter->x[0] / 2), 0);
-        p_bbox.y = clip(centroid_filter->x[1] - width_height_filter->x[1] / 2, 0);
-        p_bbox.width = clip(width_height_filter->x[0], 0);
-        p_bbox.height = clip(width_height_filter->x[1], 0);
-        p_bbox.value = 0.0;
+        p_bbox.value = trace_score;
+        p_bbox.x = round(clip((centroid_filter->x[0] - width_height_filter->x[0] / 2), 0));
+        p_bbox.y = round(clip(centroid_filter->x[1] - width_height_filter->x[1] / 2, 0));
+        p_bbox.width = round(clip(width_height_filter->x[0], 0));
+        p_bbox.height = round(clip(width_height_filter->x[1], 0));
         last_prediction = p_bbox;
         EI_LOGD("predict %d %d %d %d %f\n", last_prediction.x, last_prediction.y, last_prediction.width, last_prediction.height, last_prediction.value);
         return last_prediction;
@@ -141,6 +160,7 @@ public:
                                   static_cast<float>(bbox->height) };
         width_height_filter->update(width_height, hx_width_height);
 
+        trace_score = bbox->value;
         observations.push_back(*bbox);
         while (observations.size() > max_observations) {
             observations.erase(observations.begin());
@@ -183,7 +203,8 @@ public:
         bbox.y = round(xyxy_emas[1]->smoothed_value());
         bbox.width = round(xyxy_emas[2]->smoothed_value());
         bbox.height = round(xyxy_emas[3]->smoothed_value());
-
+        bbox.label = trace_label;
+        bbox.value = trace_score;
         return bbox;
     }
 
@@ -214,6 +235,7 @@ private:
     float hx_centroid[2];
     float hx_width_height[2];
     const char* trace_label;
+    float trace_score;
     ExponentialMovingAverage *xyxy_emas[4];
 };
 
@@ -240,7 +262,21 @@ public:
     std::vector<Trace*>closed_traces;
     std::vector<ei_object_tracking_trace_t> object_tracking_output;
 
+    /**
+     * Process new detections.
+     * @param detections Bounding boxes, this vector might be reordered.
+     */
     void process_new_detections(std::vector<ei_impulse_result_bounding_box_t> detections) {
+        // sort detections by x, y, width, height, label (same in Python code, see ei_tracking/tracking.py)
+        // so it doesn't matter in what order we pass in the detections
+        std::sort(detections.begin(), detections.end(), [](const ei_impulse_result_bounding_box_t& a, const ei_impulse_result_bounding_box_t& b) {
+            if (a.x != b.x) return a.x < b.x;
+            if (a.y != b.y) return a.y < b.y;
+            if (a.width != b.width) return a.width < b.width;
+            if (a.height != b.height) return a.height < b.height;
+            return std::strcmp(a.label, b.label) < 0;
+        });
+
         // firstly try an alignment with last observations...
         std::vector<ei_impulse_result_bounding_box_t> last_obs_bboxes;
         for (auto trace : open_traces) {
@@ -274,7 +310,7 @@ public:
         // and use whichever matching set is better
         std::vector<std::tuple<int, int, float>> matches;
 
-        if (last_obs_cost > predicted_cost) {
+        if (last_obs_cost < predicted_cost) {
             EI_LOGD("using last_obs_matches matches\n");
             matches = last_obs_matches;
         }
@@ -367,7 +403,8 @@ public:
 private:
     uint32_t trace_seq_id;
     uint32_t t;
-    GreedyAlignment alignment;
+    JonkerVolgenantAlignment alignment;
+    std::vector<std::string> seen_labels;
 };
 
 EI_IMPULSE_ERROR init_object_tracking(ei_impulse_handle_t *handle, void** state, void *config)
@@ -402,24 +439,26 @@ EI_IMPULSE_ERROR deinit_object_tracking(void* state, void *config)
 }
 
 EI_IMPULSE_ERROR process_object_tracking(ei_impulse_handle_t *handle,
+                                         uint32_t block_index,
+                                         uint32_t input_block_id,
                                          ei_impulse_result_t *result,
-                                         void *config,
+                                         void *config_ptr,
                                          void *state)
 {
-    const ei_impulse_t *impulse = handle->impulse;
     Tracker *object_tracker = (Tracker *)state;
 
-    if (impulse->sensor == EI_CLASSIFIER_SENSOR_CAMERA) {
-        if((void *)object_tracker != NULL) {
-            ei_impulse_result_bounding_box_t *bbs = result->bounding_boxes;
-            uint32_t bbs_num = result->bounding_boxes_count;
-            std::vector<ei_impulse_result_bounding_box_t> detections(bbs, bbs + bbs_num);
+    if((void *)object_tracker != NULL) {
+        ei_impulse_result_bounding_box_t *bbs = result->bounding_boxes;
+        uint32_t bbs_num = result->bounding_boxes_count;
+        std::vector<ei_impulse_result_bounding_box_t> detections(bbs, bbs + bbs_num);
 
-            object_tracker->process_new_detections(detections);
+        object_tracker->process_new_detections(detections);
 
-            result->postprocessed_output.object_tracking_output.open_traces = object_tracker->object_tracking_output.data();
-            result->postprocessed_output.object_tracking_output.open_traces_count = object_tracker->object_tracking_output.size();
-        }
+        result->postprocessed_output.object_tracking_output.open_traces = object_tracker->object_tracking_output.data();
+        result->postprocessed_output.object_tracking_output.open_traces_count = object_tracker->object_tracking_output.size();
+    }
+    else {
+        EI_LOGW("process_object_tracking: object_tracker is NULL, did you forget to call run_classifier_init()?\n");
     }
 
     return EI_IMPULSE_OK;

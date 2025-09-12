@@ -1,31 +1,48 @@
-/*
- * Copyright (c) 2022 EdgeImpulse Inc.
+/* The Clear BSD License
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2025 EdgeImpulse Inc.
+ * All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an "AS
- * IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
- * express or implied. See the License for the specific language
- * governing permissions and limitations under the License.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted (subject to the limitations in the disclaimer
+ * below) provided that the following conditions are met:
  *
- * SPDX-License-Identifier: Apache-2.0
+ *   * Redistributions of source code must retain the above copyright notice,
+ *   this list of conditions and the following disclaimer.
+ *
+ *   * Redistributions in binary form must reproduce the above copyright
+ *   notice, this list of conditions and the following disclaimer in the
+ *   documentation and/or other materials provided with the distribution.
+ *
+ *   * Neither the name of the copyright holder nor the names of its
+ *   contributors may be used to endorse or promote products derived from this
+ *   software without specific prior written permission.
+ *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY
+ * THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef _EDGE_IMPULSE_RUN_CLASSIFIER_H_
 #define _EDGE_IMPULSE_RUN_CLASSIFIER_H_
 
 #include "ei_model_types.h"
-#include "sdk_version.h"
 #include "model-parameters/model_metadata.h"
 
 #include "ei_run_dsp.h"
 #include "ei_classifier_types.h"
 #include "ei_signal_with_axes.h"
 #include "postprocessing/ei_postprocessing.h"
+#include "edge-impulse-sdk/classifier/ei_data_normalization.h"
 
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 #include "edge-impulse-sdk/porting/ei_logging.h"
@@ -63,19 +80,12 @@
 #include "edge-impulse-sdk/classifier/inferencing_engines/ethos_linux.h"
 #elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ATON
 #include "edge-impulse-sdk/classifier/inferencing_engines/aton.h"
+#elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_CEVA_NPN
+#include "edge-impulse-sdk/classifier/inferencing_engines/ceva_npn.h"
 #elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_NONE
 // noop
 #else
 #error "Unknown inferencing engine"
-#endif
-
-// strictly require sdk version and studio version macros to match
-#if EI_SDK_VERSION_MAJOR != EI_STUDIO_VERSION_MAJOR || EI_SDK_VERSION_MINOR != EI_STUDIO_VERSION_MINOR || EI_SDK_VERSION_PATCH != EI_STUDIO_VERSION_PATCH
-#if EI_SDK_VERSION_MAJOR == 0
-#pragma message "SDK version not set."
-#else
-#error "Version mismatch between edge-impulse-sdk and the model (model-parameters and tflite-model). Make sure you use the same version for both. Advised to download the deployment files again from Edge Impulse."
-#endif
 #endif
 
 // This file has an implicit dependency on ei_run_dsp.h, so must come after that include!
@@ -112,13 +122,13 @@ therefore changes are allowed. */
 __attribute__((unused)) void display_results(ei_impulse_handle_t *handle, ei_impulse_result_t* result)
 {
     // print the predictions
-    ei_printf("Timing: DSP ");
+    ei_printf("Predictions (DSP: ");
     result->timing.dsp_us ? ei_printf_float((float)result->timing.dsp_us/1000) : ei_printf("%d", result->timing.dsp);
-    ei_printf(" ms, inference ");
+    ei_printf(" ms., Classification: ");
     result->timing.classification_us ? ei_printf_float((float)result->timing.classification_us/1000) : ei_printf("%d", result->timing.classification);
-    ei_printf(" ms, anomaly ");
+    ei_printf(" ms., Anomaly: ");
     result->timing.anomaly_us ? ei_printf_float((float)result->timing.anomaly_us/1000) : ei_printf("%d", result->timing.anomaly);
-    ei_printf(" ms\r\n");
+    ei_printf("ms.): \n");
 
 #if EI_CLASSIFIER_OBJECT_DETECTION == 1
     ei_printf("#Object detection results:\r\n");
@@ -205,8 +215,6 @@ extern "C" EI_IMPULSE_ERROR run_inference(
         }
 #endif
 
-        result->copy_output = block.keep_output;
-
         EI_IMPULSE_ERROR res = block.infer_fn(impulse, fmatrix, ix, (uint32_t*)block.input_block_ids, block.input_block_ids_size, result, block.config, debug);
         if (res != EI_IMPULSE_OK) {
             return res;
@@ -248,6 +256,25 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
         return EI_IMPULSE_INFERENCE_ERROR;
     }
 
+#ifndef EI_DSP_RESULT_OVERRIDE
+    // Don't wipe in CI, as we store a pointer
+    memset(result, 0, sizeof(ei_impulse_result_t));
+#endif
+
+    // smart pointer to results array
+    // currently only SSD has multiple outputs
+    // need to be refactored to something more generic
+#if (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_SSD)
+    uint32_t num_results = handle->impulse->learning_blocks_size + 3;
+#else
+    uint32_t num_results = handle->impulse->learning_blocks_size;
+#endif
+
+    std::unique_ptr<ei_feature_t[]> raw_results_ptr(new ei_feature_t[num_results]);
+
+    result->_raw_outputs = raw_results_ptr.get();
+    memset(result->_raw_outputs, 0, sizeof(ei_feature_t) * num_results);
+
 #if (EI_CLASSIFIER_QUANTIZATION_ENABLED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ONNX_TIDL) || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ATON)
     // Shortcut for quantized image models
     ei_learning_block_t block = handle->impulse->learning_blocks[0];
@@ -261,21 +288,17 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
     }
 #endif
 
-#ifndef EI_DSP_RESULT_OVERRIDE
-    // Don't wipe in CI, as we store a pointer
-    memset(result, 0, sizeof(ei_impulse_result_t));
-#endif
-    uint32_t block_num = handle->impulse->dsp_blocks_size + handle->impulse->learning_blocks_size;
+    uint32_t block_num = handle->impulse->dsp_blocks_size;
 
     // smart pointer to features array
     std::unique_ptr<ei_feature_t[]> features_ptr(new ei_feature_t[block_num]);
     ei_feature_t* features = features_ptr.get();
-    
+
     if (features == nullptr) {
         ei_printf("ERR: Out of memory, can't allocate features\n");
         return EI_IMPULSE_ALLOC_FAILED;
     }
-    
+
     memset(features, 0, sizeof(ei_feature_t) * block_num);
 
     // have it outside of the loop to avoid going out of scope
@@ -297,12 +320,12 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
 
         matrix_ptrs[ix] = std::unique_ptr<ei::matrix_t>(new ei::matrix_t(1, block.n_output_features));
         if (matrix_ptrs[ix] == nullptr) {
-            ei_printf("ERR: Out of memory, can't allocate matrix_ptrs[%lu]\n", ix);
+            ei_printf("ERR: Out of memory, can't allocate matrix_ptrs[%lu]\n", (unsigned long)ix);
             return EI_IMPULSE_ALLOC_FAILED;
         }
 
         if (matrix_ptrs[ix]->buffer == nullptr) {
-            ei_printf("ERR: Out of memory, can't allocate matrix_ptrs[%lu]\n", ix);
+            ei_printf("ERR: Out of memory, can't allocate matrix_ptrs[%lu]\n", (unsigned long)ix);
             delete[] matrix_ptrs;
             return EI_IMPULSE_ALLOC_FAILED;
         }
@@ -364,17 +387,13 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
         out_features_index += block.n_output_features;
     }
 
-#if EI_CLASSIFIER_SINGLE_FEATURE_INPUT == 0
-    for (size_t ix = 0; ix < handle->impulse->learning_blocks_size; ix++) {
-        ei_learning_block_t block = handle->impulse->learning_blocks[ix];
-
-        if (block.keep_output) {
-            matrix_ptrs[handle->impulse->dsp_blocks_size + ix] = std::unique_ptr<ei::matrix_t>(new ei::matrix_t(1, block.output_features_count));
-            features[handle->impulse->dsp_blocks_size + ix].matrix = matrix_ptrs[handle->impulse->dsp_blocks_size + ix].get();
-            features[handle->impulse->dsp_blocks_size + ix].blockId = block.blockId;
-        }
+#if EI_CLASSIFIER_HAS_DATA_NORMALIZATION
+    EI_IMPULSE_ERROR dn_error = run_data_normalization(handle, features);
+    if (dn_error != EI_IMPULSE_OK) {
+        ei_printf("ERR: Failed to run Data Normalization process (%d)\n", dn_error);
+        return dn_error;
     }
-#endif // EI_CLASSIFIER_SINGLE_FEATURE_INPUT
+#endif
 
     result->timing.dsp_us = ei_read_timer_us() - dsp_start_us;
     result->timing.dsp = (int)(result->timing.dsp_us / 1000);
@@ -403,7 +422,8 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
     EI_IMPULSE_ERROR res = run_inference(handle, features, result, debug);
     if (res != EI_IMPULSE_OK) {
         return res;
-    } else {
+    }
+    else {
         return run_postprocessing(handle, result);
     }
 #endif
@@ -443,13 +463,18 @@ extern "C" EI_IMPULSE_ERROR process_impulse_continuous(ei_impulse_handle_t *hand
         return EI_IMPULSE_INFERENCE_ERROR;
     }
 
+    memset(result, 0, sizeof(ei_impulse_result_t));
+
+    // smart pointer to results array
+    std::unique_ptr<ei_feature_t[]> raw_results_ptr(new ei_feature_t[handle->impulse->learning_blocks_size]);
+    result->_raw_outputs = raw_results_ptr.get();
+    memset(result->_raw_outputs, 0, sizeof(ei_feature_t) * handle->impulse->learning_blocks_size);
+
     auto impulse = handle->impulse;
     static ei::matrix_t static_features_matrix(1, impulse->nn_input_frame_size);
     if (!static_features_matrix.buffer) {
         return EI_IMPULSE_ALLOC_FAILED;
     }
-
-    memset(result, 0, sizeof(ei_impulse_result_t));
 
     EI_IMPULSE_ERROR ei_impulse_error = EI_IMPULSE_OK;
 
@@ -546,18 +571,18 @@ extern "C" EI_IMPULSE_ERROR process_impulse_continuous(ei_impulse_handle_t *hand
         for (size_t ix = 0; ix < impulse->dsp_blocks_size; ix++) {
             ei_model_dsp_t block = impulse->dsp_blocks[ix];
             matrix_ptrs[ix] = std::unique_ptr<ei::matrix_t>(new ei::matrix_t(1, block.n_output_features));
-            
+
             if (matrix_ptrs[ix] == nullptr) {
-                ei_printf("ERR: Out of memory, can't allocate matrix_ptrs[%lu]\n", ix);
+                ei_printf("ERR: Out of memory, can't allocate matrix_ptrs[%lu]\n", (unsigned long)ix);
                 return EI_IMPULSE_ALLOC_FAILED;
             }
 
             if (matrix_ptrs[ix]->buffer == nullptr) {
-                ei_printf("ERR: Out of memory, can't allocate matrix_ptrs[%lu]\n", ix);
+                ei_printf("ERR: Out of memory, can't allocate matrix_ptrs[%lu]\n", (unsigned long)ix);
                 delete[] matrix_ptrs;
                 return EI_IMPULSE_ALLOC_FAILED;
             }
-        
+
             features[ix].matrix = matrix_ptrs[ix].get();
             features[ix].blockId = block.blockId;
 
@@ -650,9 +675,7 @@ extern "C" EI_IMPULSE_ERROR run_classifier_image_quantized(
     ei_impulse_result_t *result,
     bool debug = false)
 {
-    memset(result, 0, sizeof(ei_impulse_result_t));
-
-    return run_nn_inference_image_quantized(impulse, signal, result, impulse->learning_blocks[0].config, debug);
+    return run_nn_inference_image_quantized(impulse, signal, 0, result, impulse->learning_blocks[0].config, debug);
 }
 
 #endif // #if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)
@@ -815,6 +838,9 @@ extern "C" void run_classifier_init(void)
     ei_dsp_clear_continuous_audio_state();
     init_impulse(&ei_default_impulse);
     init_postprocessing(&ei_default_impulse);
+#if EI_CLASSIFIER_HAS_DATA_NORMALIZATION
+    init_data_normalization(&ei_default_impulse);
+#endif
 }
 
 /**
@@ -837,6 +863,9 @@ __attribute__((unused)) void run_classifier_init(ei_impulse_handle_t *handle)
     ei_dsp_clear_continuous_audio_state();
     init_impulse(handle);
     init_postprocessing(handle);
+#if EI_CLASSIFIER_HAS_DATA_NORMALIZATION
+    init_data_normalization(handle);
+#endif
 }
 
 /**
@@ -858,6 +887,9 @@ extern "C" void run_classifier_deinit(void)
 __attribute__((unused)) void run_classifier_deinit(ei_impulse_handle_t *handle)
 {
     deinit_postprocessing(handle);
+#if EI_CLASSIFIER_HAS_DATA_NORMALIZATION
+    deinit_data_normalization(handle);
+#endif
 }
 
 /**
