@@ -1,45 +1,45 @@
-# 魔法棒模型训练教程
-访问EdgeImpulse网站并登录
-可以直接fork现成的EdgeImpulse项目进行修改，或者自己新建项目
+# Magic Wand Model Training Tutorial
+Visit the EdgeImpulse website and log in.
+You can either fork an existing EdgeImpulse project for modification or create a new project.
 
 EdgeImpulse: https://edgeimpulse.com/<br/>
-项目链接：https://studio.edgeimpulse.com/studio/587543<br/>
+Project Link: https://studio.edgeimpulse.com/studio/587543<br/>
 
-# 网页面板一览
+# Web Panel Overview
 ![EIPanel](../resource/DocPic/EIpanel.png)
 
-# 训练过程
-## 烧录训练代码
-访问[训练代码工程](../src/ModelTrain/)并烧录
+# Training Process
+## Flash Training Code
+Visit the [training code project](../src/ModelTrain/) and flash it.
 
-## 数据转发
-打开powershell，输入以下指令将串口数据转发到EdgeImpulse
+## Data Forwarding
+Open PowerShell and enter the following command to forward serial data to EdgeImpulse:
 ```bash
 edge-impulse-data-forwarder --frequency 100
 ```
-按照提示输入EdgeImpulse平台的账号和密码，给串口数据的标签为x,y,z，给设备起一个名字为esp32，让K10连接上平台
+Follow the prompts to enter your EdgeImpulse platform account and password. Label the serial data as x, y, z, and name the device as esp32 to connect the K10 to the platform.
 ![dataforward](../resource/DocPic/dataforward.png)
 ![dataforward1](../resource/DocPic/dataforward1.png)
 
-## 采样
-选择数据采集部分，label填运动传感器数据的标签，采样时长选2000ms，即可开始采样
+## Sampling
+Select the data acquisition section, fill in the label for motion sensor data, set the sampling duration to 2000ms, and start sampling.
 ![sample](../resource/DocPic/sample.png)
 
-## 查看数据分布
-选择查看数据分布，针对性的修改数据
+## View Data Distribution
+Select "View Data Distribution" and make targeted modifications to the data.
 ![checkdata](../resource/DocPic/checkdata.png)
 
-## 定义网络结构
-自定义网络结构，并保存
+## Define Network Structure
+Customize the network structure and save it.
 ![NetworkSEL](../resource/DocPic/networkSEL.png)
 
-## 生成特征值
-生成特征值
+## Generate Features
+Generate feature values.
 ![Feat](../resource/DocPic/feature.png)
 ![Feat2](../resource/DocPic/fear2.png)
 
-## 训练模型
+## Train Model
 ![train](../resource/DocPic/train.png)
 
-## 导出模型
+## Export Model
 ![deploy](../resource/DocPic/deploy.png)

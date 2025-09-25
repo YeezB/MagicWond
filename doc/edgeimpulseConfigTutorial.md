@@ -1,27 +1,28 @@
-# 环境配置
-## 注册EdgeImpulse账号
+# Environment Configuration
+
+## Register an EdgeImpulse Account
 https://edgeimpulse.com/
 
-## 安装edge impulse cli
-- 安装 [Python 3](https://www.python.org/) 
+## Install Edge Impulse CLI
+- Install [Python 3](https://www.python.org/)
 
-- 安装 [Node.js v14 or higher](https://nodejs.org/en/)
-如果之前安装过，PowerShell 命令行输入node -v查看版本。
+- Install [Node.js v14 or higher](https://nodejs.org/en/)
+  If previously installed, check the version by running `node -v` in the PowerShell command line.
 
-- 以管理员身份打开PowerShell
-![installEICli](../resource/DocPic/installEICli.png)
+- Open PowerShell as an administrator
+  ![installEICli](../resource/DocPic/installEICli.png)
 
-- 安装edge impulse cli工具，PowerShell 命令行输入
+- Install the Edge Impulse CLI tool by running the following command in PowerShell:
 ```bash
 npm install -g edge-impulse-cli --force
 ```
 
 ## FAQ
-**Q:提示缺失C:\Users\DFRobot\AppData\Roaming\npm\node_modules\edge-impulse-cli\build\cli\daemon.js？**
-A：查找daemon.js文件，然后更改daemon.js文件位置，粘贴到这个路径。
+**Q: Missing file error: `C:\Users\DFRobot\AppData\Roaming\npm\node_modules\edge-impulse-cli\build\cli\daemon.js`?**
+A: Locate the `daemon.js` file, then move it to the specified path.
 
-**Q: 报错+CategoryInfo : SecurityError: (:) []，ParentContainsErrorRecordException +FullyQualifiedErrorId : UnauthorizedAccess？**
-A：以管理员身份打开PowerShell 输入
+**Q: Error: `+CategoryInfo : SecurityError: (:) [], ParentContainsErrorRecordException +FullyQualifiedErrorId : UnauthorizedAccess`?**
+A: Open PowerShell as an administrator and run the following command:
 ```bash
 set-executionpolicy remotesigned
 ```
