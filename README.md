@@ -1,5 +1,5 @@
 # Magic Wand Project
-
+[中文版](/README_CN.md)
 ## Project Overview
 This project is a magic wand controller based on the UNIHIKER K10, including two sets of code for the magic wand (Transmitter) and the magic hat (Receiver). The project integrates machine learning inference functionality, using models trained with EdgeImpulse for gesture recognition.
 

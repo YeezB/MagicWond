@@ -1,5 +1,5 @@
 # 魔法棒项目
-
+[English version](/README.md)
 ## 项目概述
 本项目是一个基于UNIHIKER K10的魔法棒控制器，包含魔法棒(Transmitter)和魔法帽(Receiver)两套代码。项目集成了机器学习推理功能，使用EdgeImpulse训练后的模型进行手势识别。
 

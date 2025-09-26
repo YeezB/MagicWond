@@ -1,4 +1,5 @@
 # 魔法棒模型训练教程
+[English Version](/doc/edgeimpulseConfigTutorial.md)
 访问EdgeImpulse网站并登录
 可以直接fork现成的EdgeImpulse项目进行修改，或者自己新建项目
 

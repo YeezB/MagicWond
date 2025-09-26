@@ -1,4 +1,5 @@
 # Magic Wand Model Training Tutorial
+[中文版](/doc/magicWondDataFormward_CN.md)
 Visit the EdgeImpulse website and log in.
 You can either fork an existing EdgeImpulse project for modification or create a new project.
 

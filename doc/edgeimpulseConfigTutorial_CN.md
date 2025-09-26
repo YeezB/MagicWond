@@ -1,4 +1,5 @@
 # 环境配置
+[English Version](/doc/edgeimpulseConfigTutorial.md)
 ## 注册EdgeImpulse账号
 https://edgeimpulse.com/
 

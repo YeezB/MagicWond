@@ -1,5 +1,5 @@
 # Environment Configuration
-
+[中文版](/doc/edgeimpulseConfigTutorial_CN.md)
 ## Register an EdgeImpulse Account
 https://edgeimpulse.com/
 
